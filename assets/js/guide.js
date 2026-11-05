@@ -5,14 +5,44 @@
 
   /* ---------- Video's: spelen zodra ze in beeld komen ---------- */
   const videos = [...document.querySelectorAll('video[data-auto]')];
+  const visible = new Set();
+  let focused = null; // de video onder de muis; de andere staan dan stil
+  let resumeTimer;
+  const start = (v) => { if (!v.dataset.userPaused && !reduceMotion) v.play().catch(() => {}); };
+  const resumeVisible = () => { focused = null; visible.forEach(start); };
+
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
       const v = e.target;
-      if (e.isIntersecting && !v.dataset.userPaused && !reduceMotion) v.play().catch(() => {});
-      else if (!e.isIntersecting) v.pause();
+      if (e.isIntersecting) {
+        visible.add(v);
+        if (!focused || focused === v) start(v);
+      } else {
+        visible.delete(v);
+        v.pause();
+        if (v === focused) resumeVisible();
+      }
     }
   }, { threshold: 0.35 });
   videos.forEach((v) => { v.muted = true; io.observe(v); });
+
+  /* ---------- Muis op een video: de andere video's pauzeren ---------- */
+  videos.forEach((v) => {
+    const zone = v.closest('.clip, .hero-video') || v;
+    zone.addEventListener('pointerenter', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      clearTimeout(resumeTimer);
+      focused = v;
+      videos.forEach((o) => { if (o !== v) o.pause(); });
+      start(v);
+    });
+    zone.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'mouse' || focused !== v) return;
+      // korte wachttijd, zodat niets opstart als de muis meteen naar de volgende video gaat
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(resumeVisible, 150);
+    });
+  });
 
   const icon = {
     play: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>',
